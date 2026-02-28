@@ -11,11 +11,9 @@ import (
 
 // Metrics mirrors the shape returned by the /metrics endpoint.
 type Metrics struct {
-	UptimeSeconds  int64 `json:"uptime_seconds"`
 	RequestsTotal  int64 `json:"requests_total"`
 	Errors4xxTotal int64 `json:"errors_4xx_total"`
 	Errors5xxTotal int64 `json:"errors_5xx_total"`
-	Inflight       int64 `json:"inflight"`
 	LatencyMs      struct {
 		P50 int64 `json:"p50"`
 		P95 int64 `json:"p95"`
@@ -23,13 +21,12 @@ type Metrics struct {
 }
 
 // Record is one flat line written to the JSONL file.
+// Counter fields are absolute cumulative totals from the scraped endpoint.
 type Record struct {
 	Ts             time.Time `json:"ts"`
-	UptimeSeconds  int64     `json:"uptime_seconds"`
 	RequestsTotal  int64     `json:"requests_total"`
 	Errors4xxTotal int64     `json:"errors_4xx_total"`
 	Errors5xxTotal int64     `json:"errors_5xx_total"`
-	Inflight       int64     `json:"inflight"`
 	P50Ms          int64     `json:"p50_ms"`
 	P95Ms          int64     `json:"p95_ms"`
 }
@@ -50,26 +47,6 @@ func scrape(url string) (*Metrics, error) {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 	return &m, nil
-}
-
-func record(path string, m *Metrics) {
-	r := Record{
-		Ts:             time.Now().UTC(),
-		UptimeSeconds:  m.UptimeSeconds,
-		RequestsTotal:  m.RequestsTotal,
-		Errors4xxTotal: m.Errors4xxTotal,
-		Errors5xxTotal: m.Errors5xxTotal,
-		Inflight:       m.Inflight,
-		P50Ms:          m.LatencyMs.P50,
-		P95Ms:          m.LatencyMs.P95,
-	}
-	if err := appendRecord(path, r); err != nil {
-		log.Printf("write error: %v", err)
-		return
-	}
-	log.Printf("recorded — requests=%d 4xx=%d 5xx=%d p50=%dms p95=%dms",
-		m.RequestsTotal, m.Errors4xxTotal, m.Errors5xxTotal,
-		m.LatencyMs.P50, m.LatencyMs.P95)
 }
 
 func appendRecord(path string, r Record) error {
@@ -108,7 +85,7 @@ func main() {
 
 	dataFile := envOrDefault("DATA_FILE", "metrics.jsonl")
 
-	log.Printf("goodtogo starting — url=%s interval=%s file=%s", metricsURL, interval, dataFile)
+	log.Printf("goodtogo scraper starting — url=%s interval=%s file=%s", metricsURL, interval, dataFile)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -117,6 +94,18 @@ func main() {
 		if err != nil {
 			log.Fatalf("scrape failed: %v", err)
 		}
-		record(dataFile, m)
+		r := Record{
+			Ts:             time.Now().UTC(),
+			RequestsTotal:  m.RequestsTotal,
+			Errors4xxTotal: m.Errors4xxTotal,
+			Errors5xxTotal: m.Errors5xxTotal,
+			P50Ms:          m.LatencyMs.P50,
+			P95Ms:          m.LatencyMs.P95,
+		}
+		if err := appendRecord(dataFile, r); err != nil {
+			log.Fatalf("write error: %v", err)
+		}
+		log.Printf("recorded — requests=%d 4xx=%d 5xx=%d p50=%dms p95=%dms",
+			r.RequestsTotal, r.Errors4xxTotal, r.Errors5xxTotal, r.P50Ms, r.P95Ms)
 	}
 }
