@@ -36,6 +36,8 @@ func main() {
 				break
 			}
 			log.Printf("canary up for %s — waiting until %s", age.Round(time.Second), stabilize)
+		} else {
+			log.Printf("canary not found in prometheus — waiting")
 		}
 		time.Sleep(pollInterval)
 	}
