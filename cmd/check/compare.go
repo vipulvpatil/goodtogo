@@ -28,7 +28,7 @@ func compare(base, canary windowStats) []result {
 
 	// 4xx: bad if canary rate is more than 2× baseline.
 	base4xx := rate(base.errors4xx, base.requests)
-	canary4xx := rate(canary.errors4xx, base.requests)
+	canary4xx := rate(canary.errors4xx, canary.requests)
 	results = append(results, result{
 		ok: canary4xx <= base4xx*2,
 		reason: fmt.Sprintf("4xx rate: baseline %.2f%% → canary %.2f%% (threshold 2×)",
