@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	checkInterval = 5 * time.Minute
-	promWindow    = "5m"
+	promWindow   = "5m"
+	stabilize    = 5 * time.Minute
+	pollInterval = 15 * time.Second
 )
 
 func envOrDefault(key, def string) string {
@@ -19,25 +20,49 @@ func envOrDefault(key, def string) string {
 	return def
 }
 
-func check(promURL string) {
+func main() {
+	promURL := envOrDefault("PROMETHEUS_URL", "http://localhost:9090")
+
+	log.Printf("goodtogo: waiting for canary — prometheus=%s", promURL)
+
+	for {
+		_, ok, err := queryInstant(promURL, `sum(increase(whatfpl_requests_total{job="canary"}[1m]))`)
+		if err != nil {
+			log.Printf("prometheus error: %v", err)
+		} else if ok {
+			break
+		}
+		time.Sleep(pollInterval)
+	}
+
+	log.Printf("canary detected — stabilising for %s", stabilize)
+	time.Sleep(stabilize)
+
+	log.Println("running check...")
+	if !check(promURL) {
+		os.Exit(1)
+	}
+}
+
+func check(promURL string) bool {
 	base, baseOK, err := queryJob(promURL, "baseline")
 	if err != nil {
 		log.Printf("baseline query error: %v", err)
-		return
+		return false
 	}
 	if !baseOK {
-		log.Println("no baseline data yet — waiting")
-		return
+		log.Println("no baseline data")
+		return false
 	}
 
 	canary, canaryOK, err := queryJob(promURL, "canary")
 	if err != nil {
 		log.Printf("canary query error: %v", err)
-		return
+		return false
 	}
 	if !canaryOK {
-		log.Println("no canary detected — nothing to compare")
-		return
+		log.Println("no canary data")
+		return false
 	}
 
 	results := compare(base, canary)
@@ -61,17 +86,6 @@ func check(promURL string) {
 		}
 		fmt.Printf("  %s %s\n", status, r.reason)
 	}
-}
 
-func main() {
-	promURL := envOrDefault("PROMETHEUS_URL", "http://localhost:9090")
-
-	log.Printf("goodtogo checker starting — prometheus=%s interval=%s window=%s",
-		promURL, checkInterval, promWindow)
-
-	ticker := time.NewTicker(checkInterval)
-	defer ticker.Stop()
-	for ; ; <-ticker.C {
-		check(promURL)
-	}
+	return allOK
 }
