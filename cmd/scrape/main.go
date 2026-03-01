@@ -31,8 +31,10 @@ type Record struct {
 	P95Ms          int64     `json:"p95_ms"`
 }
 
+var httpClient = &http.Client{Timeout: 10 * time.Second}
+
 func scrape(url string) (*Metrics, error) {
-	resp, err := http.Get(url) //nolint:gosec // URL comes from trusted env var
+	resp, err := httpClient.Get(url) //nolint:gosec // URL comes from trusted env var
 	if err != nil {
 		return nil, fmt.Errorf("GET %s: %w", url, err)
 	}
@@ -92,7 +94,8 @@ func main() {
 	for ; ; <-ticker.C {
 		m, err := scrape(metricsURL)
 		if err != nil {
-			log.Fatalf("scrape failed: %v", err)
+			log.Printf("scrape error: %v", err)
+			continue
 		}
 		r := Record{
 			Ts:             time.Now().UTC(),
@@ -103,7 +106,8 @@ func main() {
 			P95Ms:          m.LatencyMs.P95,
 		}
 		if err := appendRecord(dataFile, r); err != nil {
-			log.Fatalf("write error: %v", err)
+			log.Printf("write error: %v", err)
+			continue
 		}
 		log.Printf("recorded — requests=%d 4xx=%d 5xx=%d p50=%dms p95=%dms",
 			r.RequestsTotal, r.Errors4xxTotal, r.Errors5xxTotal, r.P50Ms, r.P95Ms)
