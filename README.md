@@ -35,16 +35,16 @@ Prometheus
 
 ```bash
 # against a local Prometheus (default)
-go run ./cmd/check
+go run ./cmd/goodtogo
 
 # against a remote Prometheus
-PROMETHEUS_URL=http://prometheus:9090 go run ./cmd/check
+PROMETHEUS_URL=http://prometheus:9090 go run ./cmd/goodtogo
 ```
 
 Or build and run the binary:
 
 ```bash
-go build -o goodtogo ./cmd/check
+go build -o goodtogo ./cmd/goodtogo
 ./goodtogo
 PROMETHEUS_URL=http://prometheus:9090 ./goodtogo
 ```
