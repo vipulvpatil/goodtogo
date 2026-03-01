@@ -38,8 +38,13 @@ func queryInstant(promURL, promql string) (float64, bool, error) {
 	if pr.Status != "success" {
 		return 0, false, fmt.Errorf("prometheus status %q", pr.Status)
 	}
-	if len(pr.Data.Result) == 0 {
+	switch len(pr.Data.Result) {
+	case 0:
 		return 0, false, nil
+	case 1:
+		// expected
+	default:
+		return 0, false, fmt.Errorf("expected 1 result, got %d (query not fully aggregated?)", len(pr.Data.Result))
 	}
 
 	var valStr string
