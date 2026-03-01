@@ -63,10 +63,10 @@ func queryJob(promURL, job string) (windowStats, bool, error) {
 	}
 	var stats windowStats
 	queries := []metric{
-		{fmt.Sprintf(`increase(whatfpl_requests_total{job=%q}[%s])`, job, promWindow), &stats.requests},
-		{fmt.Sprintf(`increase(whatfpl_errors_4xx_total{job=%q}[%s])`, job, promWindow), &stats.errors4xx},
-		{fmt.Sprintf(`increase(whatfpl_errors_5xx_total{job=%q}[%s])`, job, promWindow), &stats.errors5xx},
-		{fmt.Sprintf(`histogram_quantile(0.95, rate(whatfpl_request_duration_ms_bucket{job=%q}[%s]))`, job, promWindow), &stats.avgP95Ms},
+		{fmt.Sprintf(`sum(increase(whatfpl_requests_total{job=%q}[%s]))`, job, promWindow), &stats.requests},
+		{fmt.Sprintf(`sum(increase(whatfpl_errors_4xx_total{job=%q}[%s]))`, job, promWindow), &stats.errors4xx},
+		{fmt.Sprintf(`sum(increase(whatfpl_errors_5xx_total{job=%q}[%s]))`, job, promWindow), &stats.errors5xx},
+		{fmt.Sprintf(`histogram_quantile(0.95, sum(rate(whatfpl_request_duration_ms_bucket{job=%q}[%s])) by (le))`, job, promWindow), &stats.avgP95Ms},
 	}
 
 	for _, q := range queries {
