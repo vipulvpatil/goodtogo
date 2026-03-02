@@ -11,9 +11,10 @@ import (
 const outcomesFile = "outcomes.jsonl"
 
 type outcome struct {
-	BuildTag string `json:"build_tag"`
-	Verdict  string `json:"verdict"` // "GOOD TO GO" | "NOT GOOD TO GO"
-	Label    string `json:"label"`   // "promoted" | "rolled-back"
+	BuildTag   string `json:"build_tag"`
+	Verdict    string `json:"verdict"`     // rule-based: "GOOD TO GO" | "NOT GOOD TO GO"
+	LLMVerdict string `json:"llm_verdict"` // "GOOD TO GO" | "NOT GOOD TO GO" | "skipped" | "error"
+	Label      string `json:"label"`       // "promoted" | "rolled-back"
 }
 
 func dataDir() string {
@@ -51,11 +52,43 @@ func readOutcomes() ([]outcome, error) {
 	return out, sc.Err()
 }
 
+type counts struct{ tp, tn, fp, fn int }
+
+func (c counts) total() int { return c.tp + c.tn + c.fp + c.fn }
+
+func score(verdict string, label string) (tp, tn, fp, fn int) {
+	approved := verdict == "GOOD TO GO"
+	good := label == "promoted"
+	switch {
+	case approved && good:
+		tp = 1
+	case !approved && !good:
+		tn = 1
+	case approved && !good:
+		fp = 1 // dangerous: approved a bad deploy
+	case !approved && good:
+		fn = 1 // annoying: blocked a good deploy
+	}
+	return
+}
+
 func pct(num, den int) string {
 	if den == 0 {
 		return "  n/a"
 	}
 	return fmt.Sprintf("%5.1f%%", 100*float64(num)/float64(den))
+}
+
+func printMatrix(label string, c counts) {
+	fmt.Printf("%s  (n=%d)\n", label, c.total())
+	fmt.Printf("                 promoted  rolled-back\n")
+	fmt.Printf("GOOD TO GO       %4d TP   %4d FP\n", c.tp, c.fp)
+	fmt.Printf("NOT GOOD TO GO   %4d FN   %4d TN\n", c.fn, c.tn)
+	fmt.Println()
+	fmt.Printf("  accuracy   %s  (TP+TN / total)\n", pct(c.tp+c.tn, c.total()))
+	fmt.Printf("  precision  %s  (TP / TP+FP  — of approvals, how many were right)\n", pct(c.tp, c.tp+c.fp))
+	fmt.Printf("  recall     %s  (TP / TP+FN  — of good deploys, how many approved)\n", pct(c.tp, c.tp+c.fn))
+	fmt.Printf("  FP rate    %s  (FP / FP+TN  — of bad deploys, how many slipped)\n", pct(c.fp, c.fp+c.tn))
 }
 
 func main() {
@@ -69,31 +102,40 @@ func main() {
 		return
 	}
 
-	var tp, tn, fp, fn int
+	var rules, llm counts
+	var llmSkipped int
+
 	for _, o := range outcomes {
-		approved := o.Verdict == "GOOD TO GO"
-		good := o.Label == "promoted"
-		switch {
-		case approved && good:
-			tp++ // correctly approved a good deploy
-		case !approved && !good:
-			tn++ // correctly blocked a bad deploy
-		case approved && !good:
-			fp++ // wrongly approved a bad deploy  ← dangerous
-		case !approved && good:
-			fn++ // wrongly blocked a good deploy  ← annoying
+		tp, tn, fp, fn := score(o.Verdict, o.Label)
+		rules.tp += tp
+		rules.tn += tn
+		rules.fp += fp
+		rules.fn += fn
+
+		switch o.LLMVerdict {
+		case "GOOD TO GO", "NOT GOOD TO GO":
+			tp, tn, fp, fn = score(o.LLMVerdict, o.Label)
+			llm.tp += tp
+			llm.tn += tn
+			llm.fp += fp
+			llm.fn += fn
+		default:
+			llmSkipped++ // "skipped", "error", or empty (older records)
 		}
 	}
 
-	total := tp + tn + fp + fn
+	fmt.Printf("outcomes: %d\n\n", len(outcomes))
 
-	fmt.Printf("outcomes: %d\n\n", total)
-	fmt.Printf("                 promoted  rolled-back\n")
-	fmt.Printf("GOOD TO GO       %4d TP   %4d FP\n", tp, fp)
-	fmt.Printf("NOT GOOD TO GO   %4d FN   %4d TN\n", fn, tn)
+	printMatrix("rule-based", rules)
+
 	fmt.Println()
-	fmt.Printf("accuracy   %s  (TP+TN / total — overall correct rate)\n", pct(tp+tn, total))
-	fmt.Printf("precision  %s  (TP / TP+FP  — of approvals, how many were right)\n", pct(tp, tp+fp))
-	fmt.Printf("recall     %s  (TP / TP+FN  — of good deploys, how many were approved)\n", pct(tp, tp+fn))
-	fmt.Printf("FP rate    %s  (FP / FP+TN  — of bad deploys, how many slipped through)\n", pct(fp, fp+tn))
+
+	if llm.total() == 0 {
+		fmt.Println("LLM  — no verdicts recorded (set ANTHROPIC_API_KEY and re-run checks)")
+	} else {
+		if llmSkipped > 0 {
+			fmt.Printf("LLM  (%d outcome(s) excluded: no LLM verdict)\n\n", llmSkipped)
+		}
+		printMatrix("LLM", llm)
+	}
 }

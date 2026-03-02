@@ -28,12 +28,14 @@ type check struct {
 }
 
 type decision struct {
-	Time     string      `json:"time"`
-	BuildTag string      `json:"build_tag"`
-	Verdict  string      `json:"verdict"`
-	Baseline windowStats `json:"baseline"`
-	Canary   windowStats `json:"canary"`
-	Checks   []check     `json:"checks"`
+	Time       string      `json:"time"`
+	BuildTag   string      `json:"build_tag"`
+	Verdict    string      `json:"verdict"`
+	Baseline   windowStats `json:"baseline"`
+	Canary     windowStats `json:"canary"`
+	Checks     []check     `json:"checks"`
+	LLMVerdict string      `json:"llm_verdict"`
+	LLMReason  string      `json:"llm_reason"`
 }
 
 // outcome embeds decision so outcomes.jsonl is self-contained.
