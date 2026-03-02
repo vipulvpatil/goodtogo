@@ -36,22 +36,26 @@ const (
 )
 
 type checkRecord struct {
-	Time     string      `json:"time"`
-	BuildTag string      `json:"build_tag"`
-	Verdict  string      `json:"verdict"`
-	Baseline windowStats `json:"baseline"`
-	Canary   windowStats `json:"canary"`
-	Checks   []result    `json:"checks"`
+	Time       string      `json:"time"`
+	BuildTag   string      `json:"build_tag"`
+	Verdict    string      `json:"verdict"`
+	Baseline   windowStats `json:"baseline"`
+	Canary     windowStats `json:"canary"`
+	Checks     []result    `json:"checks"`
+	LLMVerdict string      `json:"llm_verdict"`
+	LLMReason  string      `json:"llm_reason"`
 }
 
-func appendResult(buildTag, verdict string, base, canary windowStats, checks []result) {
+func appendResult(buildTag, verdict, llmVerdict, llmReason string, base, canary windowStats, checks []result) {
 	rec := checkRecord{
-		Time:     time.Now().UTC().Format(time.RFC3339),
-		BuildTag: buildTag,
-		Verdict:  verdict,
-		Baseline: base,
-		Canary:   canary,
-		Checks:   checks,
+		Time:       time.Now().UTC().Format(time.RFC3339),
+		BuildTag:   buildTag,
+		Verdict:    verdict,
+		Baseline:   base,
+		Canary:     canary,
+		Checks:     checks,
+		LLMVerdict: llmVerdict,
+		LLMReason:  llmReason,
 	}
 	line, err := json.Marshal(rec)
 	if err != nil {
@@ -150,6 +154,12 @@ func check(promURL, buildTag string) bool {
 		fmt.Printf("  %s %s\n", status, r.Reason)
 	}
 
-	appendResult(buildTag, verdict, base, canary, results)
+	fmt.Println()
+	fmt.Println("--- LLM analysis ---")
+	llmVerdict, llmReason := llmAnalyze(base, canary)
+	fmt.Printf("verdict : %s\n", llmVerdict)
+	fmt.Printf("reason  : %s\n", llmReason)
+
+	appendResult(buildTag, verdict, llmVerdict, llmReason, base, canary, results)
 	return allOK
 }
