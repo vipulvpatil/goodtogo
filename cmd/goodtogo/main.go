@@ -11,12 +11,22 @@ import (
 
 const decisionsFile = "decisions.jsonl"
 
-func decisionsPath() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return decisionsFile
+func dataDir() string {
+	if dir := os.Getenv("GOODTOGO_DATA_DIR"); dir != "" {
+		_ = os.MkdirAll(dir, 0755)
+		return dir
 	}
-	return filepath.Join(filepath.Dir(exe), decisionsFile)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	dir := filepath.Join(home, ".local", "share", "goodtogo")
+	_ = os.MkdirAll(dir, 0755)
+	return dir
+}
+
+func decisionsPath() string {
+	return filepath.Join(dataDir(), decisionsFile)
 }
 
 const (

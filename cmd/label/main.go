@@ -43,16 +43,22 @@ type outcome struct {
 	LabelledAt string `json:"labelled_at"`
 }
 
-func binDir() string {
-	exe, err := os.Executable()
+func dataDir() string {
+	if dir := os.Getenv("GOODTOGO_DATA_DIR"); dir != "" {
+		_ = os.MkdirAll(dir, 0755)
+		return dir
+	}
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."
 	}
-	return filepath.Dir(exe)
+	dir := filepath.Join(home, ".local", "share", "goodtogo")
+	_ = os.MkdirAll(dir, 0755)
+	return dir
 }
 
 func readDecisions() ([]decision, error) {
-	f, err := os.Open(filepath.Join(binDir(), decisionsFile))
+	f, err := os.Open(filepath.Join(dataDir(), decisionsFile))
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -76,7 +82,7 @@ func readDecisions() ([]decision, error) {
 }
 
 func readLabelled() (map[string]bool, error) {
-	f, err := os.Open(filepath.Join(binDir(), outcomesFile))
+	f, err := os.Open(filepath.Join(dataDir(), outcomesFile))
 	if os.IsNotExist(err) {
 		return map[string]bool{}, nil
 	}
@@ -99,7 +105,7 @@ func readLabelled() (map[string]bool, error) {
 }
 
 func appendOutcome(o outcome) error {
-	f, err := os.OpenFile(filepath.Join(binDir(), outcomesFile), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(filepath.Join(dataDir(), outcomesFile), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
