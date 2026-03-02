@@ -5,10 +5,19 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 )
 
-const resultsLog = "results.jsonl"
+const decisionsFile = "decisions.jsonl"
+
+func decisionsPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return decisionsFile
+	}
+	return filepath.Join(filepath.Dir(exe), decisionsFile)
+}
 
 const (
 	promWindow   = "5m"
@@ -39,9 +48,10 @@ func appendResult(buildTag, verdict string, base, canary windowStats, checks []r
 		log.Printf("warning: could not marshal result: %v", err)
 		return
 	}
-	f, err := os.OpenFile(resultsLog, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	path := decisionsPath()
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Printf("warning: could not open %s: %v", resultsLog, err)
+		log.Printf("warning: could not open %s: %v", path, err)
 		return
 	}
 	defer f.Close()
