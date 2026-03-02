@@ -2,6 +2,8 @@ package main
 
 import "fmt"
 
+const minCanaryRequests = 100
+
 type windowStats struct {
 	requests  int64
 	errors4xx int64
@@ -15,6 +17,13 @@ type result struct {
 }
 
 func compare(base, canary windowStats) []result {
+	if canary.requests < minCanaryRequests {
+		return []result{{
+			ok:     false,
+			reason: fmt.Sprintf("canary traffic too low: %d requests in window (minimum %d) — HOLD", canary.requests, minCanaryRequests),
+		}}
+	}
+
 	var results []result
 
 	// 5xx: any increase is bad.
