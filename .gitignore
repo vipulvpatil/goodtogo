@@ -1,3 +1,4 @@
 /goodtogo
-*.jsonl
+/label
 /check
+*.jsonl
