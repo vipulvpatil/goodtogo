@@ -1,17 +1,52 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"time"
 )
 
+const resultsLog = "results.jsonl"
+
 const (
 	promWindow   = "5m"
 	stabilize    = 5 * time.Minute
 	pollInterval = 15 * time.Second
 )
+
+type checkRecord struct {
+	Time     string      `json:"time"`
+	BuildTag string      `json:"build_tag"`
+	Verdict  string      `json:"verdict"`
+	Baseline windowStats `json:"baseline"`
+	Canary   windowStats `json:"canary"`
+	Checks   []result    `json:"checks"`
+}
+
+func appendResult(buildTag, verdict string, base, canary windowStats, checks []result) {
+	rec := checkRecord{
+		Time:     time.Now().UTC().Format(time.RFC3339),
+		BuildTag: buildTag,
+		Verdict:  verdict,
+		Baseline: base,
+		Canary:   canary,
+		Checks:   checks,
+	}
+	line, err := json.Marshal(rec)
+	if err != nil {
+		log.Printf("warning: could not marshal result: %v", err)
+		return
+	}
+	f, err := os.OpenFile(resultsLog, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("warning: could not open %s: %v", resultsLog, err)
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s\n", line)
+}
 
 func envOrDefault(key, def string) string {
 	if v := os.Getenv(key); v != "" {
@@ -23,6 +58,8 @@ func envOrDefault(key, def string) string {
 func main() {
 	promURL := envOrDefault("PROMETHEUS_URL", "http://localhost:9090")
 
+	buildTag := canaryBuildTag()
+	log.Printf("goodtogo: canary build: %s", buildTag)
 	log.Printf("goodtogo: waiting for canary to stabilise — prometheus=%s", promURL)
 
 	for {
@@ -43,12 +80,12 @@ func main() {
 	}
 
 	log.Println("running check...")
-	if !check(promURL) {
+	if !check(promURL, buildTag) {
 		os.Exit(1)
 	}
 }
 
-func check(promURL string) bool {
+func check(promURL, buildTag string) bool {
 	base, baseOK, err := queryJob(promURL, "baseline")
 	if err != nil {
 		log.Printf("baseline query error: %v", err)
@@ -73,23 +110,26 @@ func check(promURL string) bool {
 
 	allOK := true
 	for _, r := range results {
-		if !r.ok {
+		if !r.Ok {
 			allOK = false
 		}
 	}
 
-	if allOK {
-		fmt.Println("GOOD TO GO")
-	} else {
-		fmt.Println("NOT GOOD TO GO")
-	}
-	for _, r := range results {
-		status := "✓"
-		if !r.ok {
-			status = "✗"
-		}
-		fmt.Printf("  %s %s\n", status, r.reason)
+	verdict := "GOOD TO GO"
+	if !allOK {
+		verdict = "NOT GOOD TO GO"
 	}
 
+	fmt.Printf("canary build: %s\n", buildTag)
+	fmt.Println(verdict)
+	for _, r := range results {
+		status := "✓"
+		if !r.Ok {
+			status = "✗"
+		}
+		fmt.Printf("  %s %s\n", status, r.Reason)
+	}
+
+	appendResult(buildTag, verdict, base, canary, results)
 	return allOK
 }
